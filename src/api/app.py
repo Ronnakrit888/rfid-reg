@@ -27,7 +27,10 @@ def init_db() :
                        first_name TEXT NOT NULL,
                        last_name TEXT NOT NULL,
                        email TEXT NOT NULL,
-                       role TEXT NOT NULL DEFAULT 'student'
+                       role TEXT NOT NULL DEFAULT 'student',
+                       is_deleted Boolean NOT NULL DEFAULT 0,
+                       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                    )
                    ''')
     conn.commit()
@@ -36,37 +39,101 @@ def init_db() :
 def get_users() :
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('SELECT * from users_reg')
-    users = cursor.fetchall()
-    cursor.close()
-    return users
+    try : 
+        cursor.execute('SELECT * from users_reg WHERE is_deleted = 0 ORDER BY created_at DESC')
+        users = cursor.fetchall()
+        cursor.close()
+        return users
+    except sqlite3.Error as e:
+        print(f"Database error in get_users: {e}")
+        return []
 
-def get_user_by_uuid(uuid) :
+def get_user_by_uuid(uuid):
+    if not uuid:
+        return None
+        
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('SELECT uuid, user_id, first_name, last_name, email, role FROM users_reg WHERE uuid = ?', (uuid,))
-    row = cursor.fetchone()
-    conn.close()
-    if row :
-        return {"uuid": row[0], 'user_id': row[1], 'first_name': row[2], 'last_name': row[3], 'email' : row[4], 'role' : row[5]}
-    else :
+    try:
+        cursor.execute('''
+            SELECT uuid, user_id, first_name, last_name, email, role 
+            FROM users_reg 
+            WHERE uuid = ? AND is_deleted = 0
+        ''', (uuid,))
+        row = cursor.fetchone()
+        
+        if row:
+            return {
+                "uuid": row[0], 
+                'user_id': row[1], 
+                'first_name': row[2], 
+                'last_name': row[3], 
+                'email': row[4], 
+                'role': row[5]
+            }
+        else:
+            return None
+            
+    except sqlite3.Error as e:
+        print(f"Database error in get_user_by_uuid: {e}")
         return None
 
-def add_user(uuid , user_id, first_name, last_name, email) :
+def add_user(uuid , user_id, first_name, last_name, email, role='student') :
+    
+    if not all([uuid, user_id, first_name, last_name, email]):
+        return {"success": False, "message": "กรุณากรอกข้อมูลให้ครบถ้วน"}
+    
+    if '@' not in email or '.' not in email:
+        return {"success": False, "message": "รูปแบบ email ไม่ถูกต้อง"}
+    
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO users_reg (uuid, user_id, first_name, last_name, email) VALUES (?, ?, ?, ?, ?)', (uuid, user_id, first_name, last_name, email))
-    conn.commit()
-    cursor.close()
-    conn.close()
+    try:
+        cursor.execute('''
+            SELECT COUNT(*) FROM users_reg 
+            WHERE (uuid = ? OR user_id = ? OR email = ?) AND is_deleted = 0
+        ''', (uuid, user_id, email))
+        
+        if cursor.fetchone()[0] > 0:
+            return {"success": False, "message": "UUID, User ID หรือ Email นี้มีอยู่ในระบบแล้ว"}
+        
+        cursor.execute('''
+            INSERT INTO users_reg (uuid, user_id, first_name, last_name, email, role, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (uuid, user_id, first_name, last_name, email, role))
+        
+        conn.commit()
+        user_id_created = cursor.lastrowid
+        
+        return {
+            "success": True, 
+            "message": "เพิ่มผู้ใช้สำเร็จ",
+            "user_id": user_id_created
+        }
+        
+    except sqlite3.IntegrityError as e:
+        return {"success": False, "message": f"ข้อมูลซ้ำกัน: {str(e)}"}
+    except sqlite3.Error as e:
+        return {"success": False, "message": f"เกิดข้อผิดพลาดในฐานข้อมูล: {str(e)}"}
+
 
 def delete_user(id) :
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM users_reg WHERE id = ?', (id,))
-    conn.commit()
-    conn.close()
-    
+    try:
+        cursor.execute('''UPDATE users_reg SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?''', (id,))
+        conn.commit()
+        
+        if cursor.rowcount > 0:
+            return {"success": True, "message": "ลบผู้ใช้สำเร็จ"}
+        else:
+            return {"success": False, "message": "ไม่สามารถลบผู้ใช้ได้"}
+                
+    except sqlite3.Error as e:
+        return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
+    finally :
+        conn.close()
+        
     
 @app.route('/')
 def index() :
@@ -76,11 +143,11 @@ def index() :
 @app.route('/api/send_uuid', methods=['POST'])
 def get_uuid() :
     global latest_uuid
+    user = get_user_by_uuid(latest_uuid)
     data = request.get_json()
     uuid = data.get('uuid')
     latest_uuid = uuid
     
-    user = get_user_by_uuid(latest_uuid)
     user_id = user['user_id'] if user else ''
     first_name = user['first_name'] if user else ''
     last_name = user['last_name'] if user else ''

@@ -70,8 +70,8 @@ def get_user_by_uuid(uuid):
                 'user_id': row[1], 
                 'first_name': row[2], 
                 'last_name': row[3], 
-                'email': row[5], 
-                'role': row[6]
+                'email': row[4], 
+                'role': row[5]
             }
         else:
             return None
@@ -146,17 +146,24 @@ def index() :
 @app.route('/api/send_uuid', methods=['POST'])
 def get_uuid() :
     global latest_uuid
-    user = get_user_by_uuid(latest_uuid)
     data = request.get_json()
     uuid = data.get('uuid')
     latest_uuid = uuid
     
+    user = get_user_by_uuid(latest_uuid)
     user_id = user['user_id'] if user else ''
     first_name = user['first_name'] if user else ''
     last_name = user['last_name'] if user else ''
     email = user['email'] if user else ''
     
-    socketio.emit('uuid_update', {'uuid': latest_uuid, 'user_id': user_id, 'first_name' : first_name, 'last_name' : last_name, 'email': email})
+    socketio.emit('uuid_update', {
+        'uuid': latest_uuid,
+        'user_id': user_id,
+        'first_name': first_name,
+        'last_name': last_name,
+        'email': email
+    })
+    
     if (uuid) :
         return jsonify({ "message" : f" This is your {uuid}"})
     else : 
@@ -245,16 +252,17 @@ def add_user_route():
         if result["success"]:
             latest_uuid = None 
             return jsonify({
+                'success': result["success"],
                 'message': result["message"],
                 'user_id': result["user_id"]
             }), 201
         else:
-            return jsonify({'message': result["message"]}), 409
+            return jsonify({'success': result['success'], 'message': result["message"]}), 409
             
     except KeyError as e:
-        return jsonify({'message': f'ข้าดข้อมูล: {str(e)}'}), 400
+        return jsonify({'success' : False,'message': f'ขาดข้อมูล: {str(e)}'}), 400
     except Exception as e:
-        return jsonify({'message': f'เกิดข้อผิดพลาด: {str(e)}'}), 500
+        return jsonify({'success' : False,'message': f'เกิดข้อผิดพลาด: {str(e)}'}), 500
 
 @app.route('/api/delete_user/<int:id>', methods=['GET'])
 def delete_user_route(id) :
@@ -267,7 +275,7 @@ def edit_user_route(id):
     cursor = conn.cursor()
     cursor.execute('SELECT id, uuid, user_id, first_name, last_name, email FROM users_reg WHERE id = ?', (id,))
     user = cursor.fetchone()
-    conn.close()
+    conn.close() 
     if user:
         return render_template('edit_user.html', user=user)
     return redirect(url_for('index'))

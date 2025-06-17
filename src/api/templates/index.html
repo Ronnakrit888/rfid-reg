@@ -262,6 +262,7 @@
 
         socket.on("uuid_update", function (data) {
           document.getElementById("uuid").value = data.uuid;
+          console.log(data)
           if (data.user_id && data.first_name && data.last_name && data.email) {
             document.getElementById("userId").value = data.user_id;
             document.getElementById("firstName").value = data.first_name;
@@ -365,6 +366,14 @@
         e.preventDefault();
 
         const formData = new FormData(form);
+        const email = formData.get("email");
+
+        if (!email.includes("@") || !email.includes(".")) {
+          messageDiv.textContent = "รูปแบบ email ไม่ถูกต้อง";
+          messageDiv.classList.remove("success", "error");
+          messageDiv.classList.add("error");
+          return;
+        }
 
         fetch(form.action, {
           method: "POST",
@@ -373,18 +382,17 @@
           .then((response) => response.json())
           .then((data) => {
             messageDiv.textContent = data.message || "No message received";
-            messageDiv.className = ""; // Reset classes
-
-            if (data.message === "User added successfully") {
+            messageDiv.className = "";
+            messageDiv.classList.remove("success", "error");
+            if (data.success == true) {
               messageDiv.classList.add("success");
               form.reset();
             } else {
               messageDiv.classList.add("error");
             }
-
             setTimeout(() => {
               window.location.reload();
-            }, 1500);
+            }, 1000);
           })
           .catch((err) => {
             messageDiv.textContent = "Error: " + err;

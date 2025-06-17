@@ -384,7 +384,7 @@
             messageDiv.textContent = data.message || "No message received";
             messageDiv.className = "";
             messageDiv.classList.remove("success", "error");
-            if (data.success == true) {
+            if (data.success === true) {
               messageDiv.classList.add("success");
               form.reset();
             } else {

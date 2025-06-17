@@ -148,7 +148,39 @@ def delete_user(id) :
     finally :
         conn.close()
         
-    
+# ✅ Use this for "create user"
+def check_is_user_id_exist(user_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute('SELECT 1 FROM users_reg WHERE user_id = ? LIMIT 1', (user_id,))
+        result = cursor.fetchone()
+        if result:
+            return {"success": True, "message": "userId นี้มีอยู่แล้ว"}
+        return {"success": False, "message": ""}
+    except sqlite3.Error as e:
+        return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
+    finally:
+        conn.close()
+
+# ✅ Use this for "update user"
+def check_is_user_id_exist_except_id(user_id, current_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            'SELECT 1 FROM users_reg WHERE user_id = ? AND id != ? LIMIT 1',
+            (user_id, current_id)
+        )
+        result = cursor.fetchone()
+        if result:
+            return {"success": True, "message": "userId นี้มีอยู่แล้ว"}
+        return {"success": False, "message": ""}
+    except sqlite3.Error as e:
+        return {"success": False, "message": f"เกิดข้อผิดพลาด: {str(e)}"}
+    finally:
+        conn.close()
+        
 @app.route('/')
 def index() :
     users = get_users()
@@ -257,7 +289,12 @@ def add_user_route():
 
         if not all([uuid, user_id, first_name, last_name, email]):
             return jsonify({'message': 'กรุณากรอกข้อมูลให้ครบถ้วน'}), 400
-
+        
+        is_user_id_exist = check_is_user_id_exist(user_id)
+        
+        if is_user_id_exist["success"]:
+            return jsonify({'success' : False, 'message' : is_user_id_exist['message']})
+        
         result = add_user(uuid, user_id, first_name, last_name, email, role)
         
         if result["success"]:
@@ -293,20 +330,37 @@ def edit_user_route(id):
 
 @app.route('/api/update_user/<int:id>', methods=['POST'])
 def update_user_route(id):
-    uuid = request.form['uuid']
-    email = request.form['email']
-    path_file = request.form['path_file']
+    try:
+        uuid = request.form['uuid']
+        user_id = request.form['userId']
+        first_name = request.form['firstName']
+        last_name = request.form['lastName']
+        email = request.form['email']
+        
+        is_user_id_exist = check_is_user_id_exist_except_id(user_id, id)
+        
+        if is_user_id_exist["success"]:
+            return jsonify({'success' : False, 'message' : is_user_id_exist['message']})
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            UPDATE users_reg 
+            SET uuid = ?, user_id = ?, first_name = ?, last_name = ?, email = ? 
+            WHERE id = ?
+            ''',
+            (uuid, user_id, first_name, last_name, email, id)
+        )
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "แก้ไขข้อมูล user สำเร็จ"})
     
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        'UPDATE users_reg SET uuid = ?, email = ?, path_file = ? WHERE id = ?',
-        (uuid, email, path_file, id)
-    )
-    conn.commit()
-    conn.close()
-    
-    return redirect(url_for('index'))
+    except sqlite3.Error as e:
+        return jsonify({"success": False, "message": f"Database error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Error: {str(e)}"}), 500
 
 @app.route('/api/table', methods=['GET'])
 def table_route():

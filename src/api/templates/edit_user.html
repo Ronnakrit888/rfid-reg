@@ -138,6 +138,29 @@
         transform: translateY(1px);
       }
 
+      #message {
+        font-weight: bold;
+        text-align: center;
+        margin-top: 15px;
+        padding: 10px;
+        border-radius: 5px;
+        display: none;
+      }
+
+      #message.success {
+        color: #155724;
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        display: block;
+      }
+
+      #message.error {
+        color: #721c24;
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        display: block;
+      }
+
       /* Mobile Styles */
       @media screen and (max-width: 768px) {
         h1 {
@@ -252,7 +275,11 @@
         <img id="imagePreview" alt="Preview" />
       </div>
 
-      <form action="/api/update_user/{{ user[0] }}" method="post">
+      <form
+        id="editUserForm"
+        action="/api/update_user/{{ user[0] }}"
+        method="post"
+      >
         <label for="uuid">UUID</label>
         <input
           type="text"
@@ -300,6 +327,7 @@
 
         <button type="submit">Update User</button>
       </form>
+      <div id="message"></div>
     </div>
     <script>
       const input = document.getElementById("imageUpload");
@@ -322,6 +350,39 @@
         preview.src = objectURL;
 
         preview.onload = () => URL.revokeObjectURL(objectURL);
+      });
+
+      const form = document.getElementById("editUserForm");
+      const messageDiv = document.getElementById("message");
+
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const formData = new FormData(form);
+
+        fetch(form.action, {
+          method: "POST",
+          body: formData,
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            messageDiv.textContent = data.message || "No message received";
+            messageDiv.className = "";
+            messageDiv.classList.remove("success", "error");
+
+            if (data.success === true) {
+              messageDiv.classList.add("success");
+              form.reset();
+            } else {
+              messageDiv.classList.add("error");
+            }
+            setTimeout(() => {
+              window.location.href = "{{ url_for('table_route') }}";
+            }, 500);
+          })
+          .catch((err) => {
+            messageDiv.textContent = "Error: " + err;
+            messageDiv.className = "error";
+          });
       });
     </script>
   </body>

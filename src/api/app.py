@@ -26,8 +26,10 @@ def init_db() :
                        user_id TEXT NOT NULL,
                        first_name TEXT NOT NULL,
                        last_name TEXT NOT NULL,
+                       full_name TEXT NOT NULL,
                        email TEXT NOT NULL,
                        role TEXT NOT NULL DEFAULT 'student',
+                       profile_image_path TEXT DEFAULT NULL,
                        is_deleted Boolean NOT NULL DEFAULT 0,
                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -68,8 +70,8 @@ def get_user_by_uuid(uuid):
                 'user_id': row[1], 
                 'first_name': row[2], 
                 'last_name': row[3], 
-                'email': row[4], 
-                'role': row[5]
+                'email': row[5], 
+                'role': row[6]
             }
         else:
             return None
@@ -77,6 +79,8 @@ def get_user_by_uuid(uuid):
     except sqlite3.Error as e:
         print(f"Database error in get_user_by_uuid: {e}")
         return None
+    finally :
+        conn.close()
 
 def add_user(uuid , user_id, first_name, last_name, email, role='student') :
     
@@ -98,9 +102,9 @@ def add_user(uuid , user_id, first_name, last_name, email, role='student') :
             return {"success": False, "message": "UUID, User ID หรือ Email นี้มีอยู่ในระบบแล้ว"}
         
         cursor.execute('''
-            INSERT INTO users_reg (uuid, user_id, first_name, last_name, email, role, created_at) 
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ''', (uuid, user_id, first_name, last_name, email, role))
+            INSERT INTO users_reg (uuid, user_id, first_name, last_name, full_name, email, role, created_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (uuid, user_id, first_name, last_name, first_name + ' ' + last_name, email, role))
         
         conn.commit()
         user_id_created = cursor.lastrowid
@@ -115,7 +119,6 @@ def add_user(uuid , user_id, first_name, last_name, email, role='student') :
         return {"success": False, "message": f"ข้อมูลซ้ำกัน: {str(e)}"}
     except sqlite3.Error as e:
         return {"success": False, "message": f"เกิดข้อผิดพลาดในฐานข้อมูล: {str(e)}"}
-
 
 def delete_user(id) :
     conn = sqlite3.connect(DB_PATH)
@@ -158,15 +161,46 @@ def get_uuid() :
         return jsonify({ "message" : f" This is your {uuid}"})
     else : 
         return jsonify({"error" : "Please scan rfid to get your uuid"}), 400
-
+    
+    
 @app.route('/api/latest_uuid', methods=['GET'])
 def get_latest_uid():
-    print(user)
-    user = get_user_by_uuid(latest_uuid)
-    if user :
-        return jsonify({'uuid': user['uuid'], 'user_id' : user['user_id'], 'first_name' : user['first_name'], 'last_name' : user['last_name'], 'email': user['email']})
-    else :
-        return jsonify({'uuid': latest_uuid})
+    try:
+        print(f"Latest UUID: {latest_uuid}")
+        
+        if not latest_uuid:
+            return jsonify({
+                'success': False,
+                'message': 'ไม่มี UUID ล่าสุด กรุณาสแกน RFID ก่อน'
+            }), 404
+        
+        user = get_user_by_uuid(latest_uuid)
+        
+        if user:
+            return jsonify({
+                'success': True,
+                'has_user_data': True,
+                'uuid': user['uuid'],
+                'user_id': user['user_id'],
+                'first_name': user['first_name'],
+                'last_name': user['last_name'],
+                'email': user['email'],
+                'role': user['role'],
+                'full_name': user['full_name']
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'has_user_data': False,
+                'uuid': latest_uuid,
+                'message': 'UUID ยังไม่ได้ลงทะเบียน'
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'เกิดข้อผิดพลาด: {str(e)}'
+        }), 500
 
 @app.route('/api/reset_uuid', methods=['POST'])
 def reset_uuid():
@@ -194,24 +228,33 @@ def reset_uuid():
 @app.route('/api/add_user', methods=['POST']) 
 def add_user_route():
     global latest_uuid
-    uuid = request.form['uuid']
-    user_id = request.form['user_id']
-    first_name = request.form['first_name']
-    last_name = request.form['last_name']
-    email = request.form['email']
+    
+    try:
+        uuid = request.form.get('uuid', '').strip()
+        user_id = request.form.get('user_id', '').strip()
+        first_name = request.form.get('first_name', '').strip()
+        last_name = request.form.get('last_name', '').strip()
+        email = request.form.get('email', '').strip()
+        role = request.form.get('role', 'student').strip()
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('SELECT uuid FROM users_reg WHERE uuid = ?', (uuid,)) 
-    user = cursor.fetchone()
-    conn.close()
+        if not all([uuid, user_id, first_name, last_name, email]):
+            return jsonify({'message': 'กรุณากรอกข้อมูลให้ครบถ้วน'}), 400
 
-    if user:
-        return jsonify({'message': 'Have this uuid already'}), 409
-
-    add_user(uuid, user_id, first_name, last_name, email)
-    latest_uuid = ""
-    return jsonify({'message': 'User added successfully'})
+        result = add_user(uuid, user_id, first_name, last_name, email, role)
+        
+        if result["success"]:
+            latest_uuid = None 
+            return jsonify({
+                'message': result["message"],
+                'user_id': result["user_id"]
+            }), 201
+        else:
+            return jsonify({'message': result["message"]}), 409
+            
+    except KeyError as e:
+        return jsonify({'message': f'ข้าดข้อมูล: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'message': f'เกิดข้อผิดพลาด: {str(e)}'}), 500
 
 @app.route('/api/delete_user/<int:id>', methods=['GET'])
 def delete_user_route(id) :

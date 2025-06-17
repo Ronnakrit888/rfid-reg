@@ -3,6 +3,7 @@ from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import sqlite3
 import os
+import csv
 from uuid import uuid4
 
 app = Flask(__name__)
@@ -108,6 +109,16 @@ def add_user(uuid , user_id, first_name, last_name, email, role='student') :
         
         conn.commit()
         user_id_created = cursor.lastrowid
+        
+        csv_path = os.path.join(os.path.dirname(__file__), '..', 'database', 'users.csv')
+        csv_path = os.path.abspath(csv_path)
+        file_exists = os.path.isfile(csv_path)
+
+        with open(csv_path, mode='a', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            if not file_exists:
+                writer.writerow(['uuid', 'user_id', 'first_name', 'last_name', 'full_name', 'email', 'role'])
+                writer.writerow([uuid, user_id, first_name, last_name, f"{first_name} {last_name}", email, role])
         
         return {
             "success": True, 

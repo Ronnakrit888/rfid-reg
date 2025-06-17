@@ -39,6 +39,36 @@
         box-shadow: 0 4px 32px rgba(31, 90, 165, 0.11);
       }
 
+      .image-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 20px;
+        gap: 12px;
+      }
+
+      #imagePreview {
+        max-width: 300px;
+        max-height: 300px;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        object-fit: cover;
+      }
+      #imagePreview:not([src]) {
+        display: none;
+      }
+
+      .upload-label {
+        font-weight: bold;
+        color: #0077b6;
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+      }
+
+      #imageUpload {
+        margin-bottom: 12px;
+      }
+
       h2 {
         color: #0077b6;
         font-size: 1.5rem;
@@ -193,6 +223,35 @@
     <h1>Edit User</h1>
     <div class="container">
       <h2>User Details</h2>
+      <div class="image-container">
+        <label>Upload Profile</label>
+        <label for="imageUpload" class="upload-label" style="cursor: pointer">
+          <svg
+            class="w-3 h-3 text-gray-800 dark:text-white"
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+            width="32"
+            height="32"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M12 3a1 1 0 0 1 .78.375l4 5a1 1 0 1 1-1.56 1.25L13 6.85V14a1 1 0 1 1-2 0V6.85L8.78 9.626a1 1 0 1 1-1.56-1.25l4-5A1 1 0 0 1 12 3ZM9 14v-1H5a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2h-4v1a3 3 0 1 1-6 0Zm8 2a1 1 0 1 0 0 2h.01a1 1 0 1 0 0-2H17Z"
+              clip-rule="evenodd"
+            />
+          </svg>
+        </label>
+        <input
+          type="file"
+          id="imageUpload"
+          accept="image/*"
+          style="display: none"
+        />
+
+        <img id="imagePreview" alt="Preview" />
+      </div>
+
       <form action="/api/update_user/{{ user[0] }}" method="post">
         <label for="uuid">UUID</label>
         <input
@@ -242,28 +301,28 @@
         <button type="submit">Update User</button>
       </form>
     </div>
+    <script>
+      const input = document.getElementById("imageUpload");
+      const preview = document.getElementById("imagePreview");
 
-    <!-- <script>
-      const imagePath = "{{ user[3] }}";
+      input.addEventListener("change", () => {
+        const file = input.files[0];
+        if (!file) return;
 
-      async function loadImagePreview() {
-        if (!imagePath) return;
+        const allowedTypes = ["image/jpeg", "image/jpg", "image/png"];
 
-        try {
-          const response = await fetch(`/photos/${imagePath.split("/").pop()}`);
-          if (!response.ok) throw new Error("Image not found");
-
-          const blob = await response.blob();
-          const objectURL = URL.createObjectURL(blob);
-
-          const img = document.getElementById("imagePreview");
-          img.src = objectURL;
-        } catch (err) {
-          console.error("Failed to load image:", err);
+        if (!allowedTypes.includes(file.type)) {
+          alert("Please upload an image file (JPG, JPEG, or PNG only).");
+          input.value = "";
+          preview.src = "";
+          return;
         }
-      }
 
-      window.addEventListener("DOMContentLoaded", loadImagePreview);
-    </script> -->
+        const objectURL = URL.createObjectURL(file);
+        preview.src = objectURL;
+
+        preview.onload = () => URL.revokeObjectURL(objectURL);
+      });
+    </script>
   </body>
 </html>
